@@ -20,7 +20,9 @@ use des::Des; // DES cipher
 use cbc::{Encryptor as CbcEncryptor, Decryptor as CbcDecryptor};
 use cipher::{block_padding::Pkcs7, BlockEncryptMut, BlockDecryptMut, KeyIvInit};
 
-use eframe::egui; // GUI things
+
+
+use eframe::egui;
 
 const PBKDF2_ITERATIONS: u32 = 100_000;
 const NONCE_LENGTH: usize = 12;
@@ -125,6 +127,7 @@ fn decrypt_des(ciphertext_b64: &str, key_b64: &str, iv_b64: &str) -> String {
     String::from_utf8(decrypted.to_vec()).unwrap()
 }
 
+<
 /// GUI State for secure Messaging
 #[derive(Default)]
 struct MyApp{
@@ -134,6 +137,7 @@ struct MyApp{
     nonce: String,
     decrypted: String,
 }
+
 
 /// Implements the GUI layout using egui
 impl eframe::App for MyApp {
@@ -165,7 +169,9 @@ impl eframe::App for MyApp {
     }
 }
 
+
 /// CLI and GUI entry point
+
 fn main() {
     let password = "sharedSecret123";
     let message = "Hello, Bob!";
