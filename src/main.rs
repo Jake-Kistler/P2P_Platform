@@ -11,6 +11,8 @@ use des::Des;
 use cbc::{Encryptor as CbcEncryptor, Decryptor as CbcDecryptor};
 use cipher::{block_padding::Pkcs7, BlockEncryptMut, BlockDecryptMut, KeyIvInit};
 
+use eframe::egui;
+
 const PBKDF2_ITERATIONS: u32 = 100_000;
 const NONCE_LENGTH: usize = 12;
 
@@ -98,6 +100,44 @@ fn decrypt_des(ciphertext_b64: &str, key_b64: &str, iv_b64: &str) -> String {
     String::from_utf8(decrypted.to_vec()).unwrap()
 }
 
+#[derive(Default)]
+struct MyApp{
+    message: String,
+    password: String,
+    ciphertext: String,
+    nonce: String,
+    decrypted: String,
+}
+
+impl eframe::App for MyApp {
+    fn update(&mut self, ctx: &egui::Context,_: &mut eframe::Frame) {
+        egui::CentralPanel::default().show(ctx, |ui| {
+            ui.heading("Secure Message Encryption");
+
+            ui.label("Message:");
+            ui.text_edit_singleline(&mut self.password);
+
+            if ui.button("Encrypt").clicked() {
+                let (cipher, nonce) = encrypt_aes(&self.message, &self.password);
+                self.ciphertext = cipher;
+                self.nonce = nonce;
+                self.decrypted = decrypt_aes(&self.ciphertext, &self.nonce, &self.password);
+
+            }
+
+            ui.separator();
+            ui.label("Encrypted (Base64):");
+            ui.text_edit_multiline(&mut self.ciphertext);
+
+            ui.label("Nonce (Base64):");
+            ui.text_edit_multiline(&mut self.nonce);
+
+            ui.label("Decrypted:");
+            ui.text_edit_multiline(&mut self.decrypted);
+        });
+    }
+}
+
 fn main() {
     let password = "sharedSecret123";
     let message = "Hello, Bob!";
@@ -116,4 +156,7 @@ fn main() {
     println!("IV: {}", des_iv);
     let des_decrypted = decrypt_des(&des_cipher, &des_key, &des_iv);
     println!("Decrypted: {}", des_decrypted);
+
+    let options = eframe::NativeOptions::default();
+    eframe::run_native("Secure P2P Encryptor", options, Box::new(|_cc| Box::<MyApp>::default()));
 }
