@@ -1,32 +1,48 @@
-use aes_gcm::{Aes128Gcm, Key, Nonce}; // Or Aes256Gcm
-use aes_gcm::aead::{Aead, KeyInit};
-use sha2::Sha256;
-use pbkdf2::pbkdf2;
-use hmac::Hmac;
-use rand_core::RngCore;
-use rand_core::OsRng;
-use base64::{engine::general_purpose, Engine as _};
+//! Secure P2P Messaging Tool
+//!
+//! This application encrypts and decrypts messages, photos (yet to be implemented), files (yet to be implemented) using either:
+//! - AES-128 in GCM mode (modern authenticated encryption)
+//! - DES in CBC mode (older 56 bit key support)
+//!
+//!  Includes password-based key derivation (PBKDF2) and an egui-based GUI frontend.
 
-use des::Des;
+
+use aes_gcm::{Aes128Gcm, Key, Nonce}; // AES-128 GCM mode
+use aes_gcm::aead::{Aead, KeyInit}; // Encryption trait interface
+use sha2::Sha256; // SHA-256 hash function
+use pbkdf2::pbkdf2; // Password based key derivation
+use hmac::Hmac;
+use rand_core::RngCore; // Secure random number gen
+use rand_core::OsRng; // random num gen part 2
+use base64::{engine::general_purpose, Engine as _}; // Allows for base 64 encoding and decoding
+
+use des::Des; // DES cipher
 use cbc::{Encryptor as CbcEncryptor, Decryptor as CbcDecryptor};
 use cipher::{block_padding::Pkcs7, BlockEncryptMut, BlockDecryptMut, KeyIvInit};
+
+
 
 use eframe::egui;
 
 const PBKDF2_ITERATIONS: u32 = 100_000;
 const NONCE_LENGTH: usize = 12;
 
-/// Supported encryption modes
+/// Enum to represent encryption types
 enum Mode {
     AES,
     DES,
 }
 
-/// Derive a 128-bit encryption key from a password using PBKDF2 + SHA256
-/// AES returns [u8;16]
-/// DES returns [u8;8]
+/// Derive a key from a password using PBKDF2-HMAC-SHA256
+///
+/// - For AES: returns an 16 byte (128-bit) key
+/// - For DES: returns an 8 byte (56-bit + padding) key
+///
+/// # Arguments
+/// * `password` - Shared secret string
+/// * `mode` - Which cipher you're deriving a key for
 fn derive_key(password: &str, mode:Mode) -> Vec<u8> {
-    let salt = b"chat_salt"; // Normally you’d store or exchange this
+    let salt = b"chat_salt"; // Currently a static salt value
     let mut key = vec![0u8; match mode {
         Mode::AES => 16,
         Mode::DES => 8,
@@ -36,14 +52,16 @@ fn derive_key(password: &str, mode:Mode) -> Vec<u8> {
 }
 
 /// Encrypt a message with AES-GCM using the shared password.
-/// Returns (ciphertext_base64, nonce_base64)
+///
+/// # Returns
+/// A tuple of base64-encoded (ciphertext, nonce)
 fn encrypt_aes(message: &str, password: &str) -> (String, String) {
     let derived = derive_key(password, Mode::AES);
     let key = Key::<Aes128Gcm>::from_slice(&derived);
     let cipher = Aes128Gcm::new(key);
 
     let mut nonce_bytes = [0u8; NONCE_LENGTH];
-    OsRng.fill_bytes(&mut nonce_bytes);
+    OsRng.fill_bytes(&mut nonce_bytes); // Generate a fresh nonce
     let nonce = Nonce::from_slice(&nonce_bytes);
 
     let ciphertext = cipher.encrypt(nonce, message.as_bytes()).expect("encryption failure!");
@@ -56,6 +74,9 @@ fn encrypt_aes(message: &str, password: &str) -> (String, String) {
 
 
 /// Decrypts a base64-encoded message with AES-GCM and the shared password.
+///
+/// # Returns
+/// The original plaintext as a UTF-8 string
 fn decrypt_aes(ciphertext_b64: &str, nonce_b64: &str, password: &str) -> String {
     let key_bytes = derive_key(password, Mode::AES);
     let key = aes_gcm::Key::<Aes128Gcm>::from_slice(&key_bytes);
@@ -70,12 +91,15 @@ fn decrypt_aes(ciphertext_b64: &str, nonce_b64: &str, password: &str) -> String 
 }
 
 /// DES-CBC encryption
+///
+/// # Returns
+/// A tuple of base64-encoded (ciphertext, key, iv)
 fn encrypt_des(message: &str, password: &str) -> (String, String, String) {
     let key = derive_key(password, Mode::DES);
     let mut iv = [0u8; 8];
     OsRng.fill_bytes(&mut iv);
 
-    let mut buffer = vec![0u8; message.len() + 8];
+    let mut buffer = vec![0u8; message.len() + 8]; // Add padding buffer
     buffer[..message.len()].copy_from_slice(message.as_bytes());
 
     let cipher = CbcEncryptor::<Des>::new_from_slices(&key, &iv).unwrap();
@@ -89,6 +113,9 @@ fn encrypt_des(message: &str, password: &str) -> (String, String, String) {
 }
 
 /// DES-CBC decryption
+///
+/// # Returns
+/// The decrypted plaintext
 fn decrypt_des(ciphertext_b64: &str, key_b64: &str, iv_b64: &str) -> String {
     let key = general_purpose::STANDARD.decode(key_b64).unwrap();
     let iv = general_purpose::STANDARD.decode(iv_b64).unwrap();
@@ -100,6 +127,8 @@ fn decrypt_des(ciphertext_b64: &str, key_b64: &str, iv_b64: &str) -> String {
     String::from_utf8(decrypted.to_vec()).unwrap()
 }
 
+<
+/// GUI State for secure Messaging
 #[derive(Default)]
 struct MyApp{
     message: String,
@@ -109,6 +138,8 @@ struct MyApp{
     decrypted: String,
 }
 
+
+/// Implements the GUI layout using egui
 impl eframe::App for MyApp {
     fn update(&mut self, ctx: &egui::Context,_: &mut eframe::Frame) {
         egui::CentralPanel::default().show(ctx, |ui| {
@@ -137,6 +168,9 @@ impl eframe::App for MyApp {
         });
     }
 }
+
+
+/// CLI and GUI entry point
 
 fn main() {
     let password = "sharedSecret123";
