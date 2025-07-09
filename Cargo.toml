@@ -18,6 +18,9 @@ des = "0.8"
 cbc = "0.1"
 cipher = "0.4"
 
+# GUI things
+eframe = "0.27"
+
 [dependency.base64ct]
 version = "1.7.3"
 
