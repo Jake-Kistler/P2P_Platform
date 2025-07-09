@@ -14,6 +14,9 @@ sha2 = "0.10"
 pbkdf2 = "0.11"
 base64 = "0.21"
 hmac = "0.12.1"
+des = "0.8"
+cbc = "0.1"
+cipher = "0.4"
 
 [dependency.base64ct]
 version = "1.7.3"
