@@ -17,6 +17,7 @@ hmac = "0.12.1"
 des = "0.8"
 cbc = "0.1"
 cipher = "0.4"
+image = "0.25
 
 # GUI things
 eframe = "0.27"
