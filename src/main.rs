@@ -6,6 +6,9 @@
 //!
 //!  Includes password-based key derivation (PBKDF2) and an egui-based GUI frontend.
 
+mod image_crypto;
+
+
 
 use aes_gcm::{Aes128Gcm, Key, Nonce}; // AES-128 GCM mode
 use aes_gcm::aead::{Aead, KeyInit}; // Encryption trait interface
@@ -23,6 +26,8 @@ use cipher::{block_padding::Pkcs7, BlockEncryptMut, BlockDecryptMut, KeyIvInit};
 use std::fs;
 
 use eframe::egui; // GUI things
+
+pub use image_crypto::{encrypt_image, decrypt_image};
 
 const PBKDF2_ITERATIONS: u32 = 100_000;
 const NONCE_LENGTH: usize = 12;
@@ -240,6 +245,13 @@ struct MyApp{
 /// - Buttons to encrypt/decrypt message and image
 /// - Base64 output of ciphertext and nonce
 /// - Display of original and decrypted images
+}
+
+/// Implements the GUI layout for both messages and images
+///
+/// This struct handles for the states for messages, encryption passwords, and image previews,
+// and defines the main egui and even handling logic.
+
 impl eframe::App for MyApp {
     fn update(&mut self, ctx: &egui::Context, _: &mut eframe::Frame) {
         egui::CentralPanel::default().show(ctx, |ui| {
@@ -303,6 +315,34 @@ impl eframe::App for MyApp {
             });
 
             ui.separator();
+
+            ui.heading("Image Preview");
+            ui.horizontal(|ui| {
+                if ui.button("Load Original Image").clicked() {
+                    self.original_texture = load_image_texture(ctx, "tests/nuts.png");
+                }
+
+                if ui.button("Load Decrypted Image").clicked() {
+                    self.decrypted_texture = load_image_texture(ctx, "decrypted_output.png");
+                }
+            });
+
+            ui.horizontal(|ui| {
+                if let Some(texture) = &self.original_texture {
+                    ui.vertical(|ui| {
+                        ui.label("Original:");
+                        ui.image(texture);
+                    });
+                }
+
+                if let Some(texture) = &self.decrypted_texture {
+                    ui.vertical(|ui| {
+                        ui.label("Decrypted:");
+                        ui.image(texture);
+                    });
+                }
+            });
+
             ui.label("Encrypted (Base64):");
             ui.text_edit_multiline(&mut self.ciphertext);
 
@@ -314,7 +354,6 @@ impl eframe::App for MyApp {
         });
     }
 }
-
 
 /// Loads an image from the filesystem and coverts it into a texture that can be displayed in egu.
 /// 
