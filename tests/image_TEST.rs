@@ -30,6 +30,7 @@ mod tests {
         // Compare contents
         assert_eq!(original_bytes, decrypted_bytes, "Decrypted image doesn't match original");
     }
+
 }
 
 use P2P_Platform::image_crypto::{encrypt_image, decrypt_image};
