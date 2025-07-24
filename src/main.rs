@@ -228,31 +228,54 @@ struct MyApp{
     decrypted: String,
     original_texture: Option<egui::TextureHandle>,
     decrypted_texture: Option<egui::TextureHandle>,
+    image_ciphertext: String,
+    image_nonce: String,
+    image_password: String,
 }
 
-/// Implements the GUI layout for both messages and images
+/// Updates the GUI each frame. Handles message encryption, image encryption, and image preview.
 ///
-/// This struct handles for the states for messages, encryption passwords, and image previews,
-// and defines the main egui and even handling logic.
+/// GUI Layout:
+/// - Input for message and password
+/// - Buttons to encrypt/decrypt message and image
+/// - Base64 output of ciphertext and nonce
+/// - Display of original and decrypted images
 impl eframe::App for MyApp {
-    fn update(&mut self, ctx: &egui::Context,_: &mut eframe::Frame) {
+    fn update(&mut self, ctx: &egui::Context, _: &mut eframe::Frame) {
         egui::CentralPanel::default().show(ctx, |ui| {
-            ui.heading("Secure Message Encryption");
-
-            ui.label("Message:");
-            ui.text_edit_singleline(&mut self.password);
-
-            if ui.button("Encrypt").clicked() {
-                let (cipher, nonce) = encrypt_aes(&self.message, &self.password);
-                self.ciphertext = cipher;
-                self.nonce = nonce;
-                self.decrypted = decrypt_aes(&self.ciphertext, &self.nonce, &self.password);
-
-            }
+            ui.heading("Secure Message & Image Encryption");
 
             ui.separator();
+            ui.label("Enter Message:");
+            ui.text_edit_singleline(&mut self.message);
 
+            ui.label("Enter Password:");
+            ui.text_edit_singleline(&mut self.password);
+
+            ui.horizontal(|ui| {
+                if ui.button("Encrypt").clicked() {
+                    // Text encryption
+                    let (cipher, nonce) = encrypt_aes(&self.message, &self.password);
+                    self.ciphertext = cipher;
+                    self.nonce = nonce;
+                    self.decrypted = decrypt_aes(&self.ciphertext, &self.nonce, &self.password);
+
+                    // Image encryption
+                    let (img_cipher, img_nonce) = encrypt_image("tests/nuts.png", &self.password);
+                    self.ciphertext = img_cipher;
+                    self.nonce = img_nonce;
+                }
+
+                if ui.button("Decrypt").clicked() {
+                    // Image decryption
+                    decrypt_image(&self.ciphertext, &self.nonce, &self.password, "decrypted_output.png");
+                    self.decrypted_texture = load_image_texture(ctx, "decrypted_output.png");
+                }
+            });
+
+            ui.separator();
             ui.heading("Image Preview");
+
             ui.horizontal(|ui| {
                 if ui.button("Load Original Image").clicked() {
                     self.original_texture = load_image_texture(ctx, "tests/nuts.png");
@@ -279,17 +302,19 @@ impl eframe::App for MyApp {
                 }
             });
 
+            ui.separator();
             ui.label("Encrypted (Base64):");
             ui.text_edit_multiline(&mut self.ciphertext);
 
             ui.label("Nonce (Base64):");
             ui.text_edit_multiline(&mut self.nonce);
 
-            ui.label("Decrypted:");
+            ui.label("Decrypted Message:");
             ui.text_edit_multiline(&mut self.decrypted);
         });
     }
 }
+
 
 /// Loads an image from the filesystem and coverts it into a texture that can be displayed in egu.
 /// 
