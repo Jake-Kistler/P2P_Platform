@@ -6,6 +6,9 @@
 //!
 //!  Includes password-based key derivation (PBKDF2) and an egui-based GUI frontend.
 
+mod image_crypto;
+
+
 
 use aes_gcm::{Aes128Gcm, Key, Nonce}; // AES-128 GCM mode
 use aes_gcm::aead::{Aead, KeyInit}; // Encryption trait interface
@@ -23,6 +26,8 @@ use cipher::{block_padding::Pkcs7, BlockEncryptMut, BlockDecryptMut, KeyIvInit};
 use std::fs;
 
 use eframe::egui; // GUI things
+
+pub use image_crypto::{encrypt_image, decrypt_image};
 
 const PBKDF2_ITERATIONS: u32 = 100_000;
 const NONCE_LENGTH: usize = 12;
