@@ -7,6 +7,7 @@
 //!  Includes password-based key derivation (PBKDF2) and an egui-based GUI frontend.
 
 mod image_crypto;
+mod file_crypto;
 
 
 
@@ -29,6 +30,9 @@ use eframe::egui; // GUI things
 use egui::Widget;
 use egui::{ImageSource};
 use egui::load::SizedTexture;
+
+use P2P_Platform::{encrypt_file, decrypt_file};
+
 
 
 
@@ -153,6 +157,11 @@ struct MyApp {
 
     // For displaying image previews
     image_texture: Option<egui::TextureHandle>,
+
+    // file things
+    file_path: String,
+    file_password: String,
+    file_status: String,
 }
 
 
@@ -188,10 +197,18 @@ impl eframe::App for MyApp {
 
             ui.horizontal(|ui| {
                 if ui.button("Encrypt").clicked() {
-                    // encrypt text
+                    let (cipher, nonce) = encrypt_aes(&self.text_input, &self.text_password);
+                    self.image_ciphertext = cipher;
+                    self.image_nonce = nonce;
+                    println!("Encrypted!");
                 }
                 if ui.button("Decrypt").clicked() {
-                    // decrypt text
+                    self.decrypted_message = decrypt_aes(
+                        &self.image_ciphertext,
+                        &self.image_nonce,
+                        &self.text_password,
+                    );
+                    println!("Decrypted!");
                 }
             });
 
@@ -200,10 +217,12 @@ impl eframe::App for MyApp {
 
             ui.horizontal(|ui| {
                 if ui.button("Load Original Image").clicked() {
-                    // Load original
+                    self.image_texture = load_image_texture(ctx, "tests/nuts.png");
+                    println!("Loaded original image!");
                 }
                 if ui.button("Load Decrypted Image").clicked() {
-                    // Load decrypted
+                    self.image_texture = load_image_texture(ctx, "tests/decrypted_output.png");
+                    println!("Loaded decrypted image!");
                 }
             });
 
@@ -217,6 +236,47 @@ impl eframe::App for MyApp {
                     size: image_texture.size_vec2(),
                 }));
             }
+
+            ui.separator();
+            ui.label("📁 File Tools");
+
+            ui.horizontal(|ui| {
+                ui.label("File Path:");
+                ui.text_edit_singleline(&mut self.file_path);
+            });
+
+            ui.horizontal(|ui| {
+                ui.label("Password:");
+                ui.text_edit_singleline(&mut self.file_password);
+            });
+
+            ui.horizontal(|ui| {
+                if ui.button("Encrypt File").clicked() {
+                    match encrypt_file(&self.file_path, &self.file_password) {
+                        Ok((cipher_b64, nonce_b64)) => {
+                            let out_path = "output/encrypted_file.bin";
+                            fs::write(out_path, cipher_b64.clone()).ok();
+                            self.file_status = format!("Encrypted to: {out_path}");
+                        }
+                        Err(e) => {
+                            self.file_status = format!("Encryption error: {e}");
+                        }
+                    }
+                }
+
+                if ui.button("Decrypt File").clicked() {
+                    let out_path = "output/decrypted_file.txt";
+                    let cipher = fs::read_to_string(&self.file_path).unwrap_or_default();
+                    let nonce = "nonce-placeholder"; // TODO: Load from saved value or file
+
+                    match decrypt_file(&cipher, &nonce, &self.file_password, out_path) {
+                        Ok(_) => self.file_status = format!("Decrypted to: {out_path}"),
+                        Err(e) => self.file_status = format!("Decryption error: {e}"),
+                    }
+                }
+            });
+
+            ui.label(&self.file_status);
 
 
 
