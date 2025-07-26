@@ -26,6 +26,11 @@ use cipher::{block_padding::Pkcs7, BlockEncryptMut, BlockDecryptMut, KeyIvInit};
 use std::fs;
 
 use eframe::egui; // GUI things
+use egui::Widget;
+use egui::{ImageSource};
+use egui::load::SizedTexture;
+
+
 
 pub use image_crypto::{encrypt_image, decrypt_image};
 
@@ -135,18 +140,21 @@ fn decrypt_des(ciphertext_b64: &str, key_b64: &str, iv_b64: &str) -> String {
 
 /// GUI State for secure Messaging
 #[derive(Default)]
-struct MyApp{
-    message: String,
-    password: String,
-    ciphertext: String,
-    nonce: String,
-    decrypted: String,
-    original_texture: Option<egui::TextureHandle>,
-    decrypted_texture: Option<egui::TextureHandle>,
+struct MyApp {
+    // For text message encryption
+    text_input: String,
+    text_password: String,
+    decrypted_message: String,
+
+    // For image encryption
     image_ciphertext: String,
     image_nonce: String,
     image_password: String,
+
+    // For displaying image previews
+    image_texture: Option<egui::TextureHandle>,
 }
+
 
 /// Updates the GUI each frame. Handles message encryption, image encryption, and image preview.
 ///
@@ -163,107 +171,74 @@ struct MyApp{
 // and defines the main egui and even handling logic.
 
 impl eframe::App for MyApp {
-    fn update(&mut self, ctx: &egui::Context, _: &mut eframe::Frame) {
+    fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         egui::CentralPanel::default().show(ctx, |ui| {
-            ui.heading("Secure Message & Image Encryption");
-
+            ui.heading("🔐 Secure Message & Image Encryption");
             ui.separator();
-            ui.label("Enter Message:");
-            ui.text_edit_singleline(&mut self.message);
 
-            ui.label("Enter Password:");
-            ui.text_edit_singleline(&mut self.password);
+            ui.horizontal(|ui| {
+                ui.label("Enter Message:");
+                ui.text_edit_singleline(&mut self.text_input);
+            });
+
+            ui.horizontal(|ui| {
+                ui.label("Enter Password:");
+                ui.text_edit_singleline(&mut self.text_password);
+            });
 
             ui.horizontal(|ui| {
                 if ui.button("Encrypt").clicked() {
-                    // Text encryption
-                    let (cipher, nonce) = encrypt_aes(&self.message, &self.password);
-                    self.ciphertext = cipher;
-                    self.nonce = nonce;
-                    self.decrypted = decrypt_aes(&self.ciphertext, &self.nonce, &self.password);
-
-                    // Image encryption
-                    let (img_cipher, img_nonce) = encrypt_image("tests/nuts.png", &self.password);
-                    self.ciphertext = img_cipher;
-                    self.nonce = img_nonce;
+                    // encrypt text
                 }
-
                 if ui.button("Decrypt").clicked() {
-                    // Image decryption
-                    decrypt_image(&self.ciphertext, &self.nonce, &self.password, "decrypted_output.png");
-                    self.decrypted_texture = load_image_texture(ctx, "decrypted_output.png");
+                    // decrypt text
                 }
             });
 
             ui.separator();
-            ui.heading("Image Preview");
+            ui.label("🖼️ Image Tools");
 
             ui.horizontal(|ui| {
                 if ui.button("Load Original Image").clicked() {
-                    self.original_texture = load_image_texture(ctx, "tests/nuts.png");
+                    // Load original
                 }
-
                 if ui.button("Load Decrypted Image").clicked() {
-                    self.decrypted_texture = load_image_texture(ctx, "decrypted_output.png");
+                    // Load decrypted
                 }
             });
 
-            ui.horizontal(|ui| {
-                if let Some(texture) = &self.original_texture {
-                    ui.vertical(|ui| {
-                        ui.label("Original:");
-                        ui.image(texture);
-                    });
-                }
 
-                if let Some(texture) = &self.decrypted_texture {
-                    ui.vertical(|ui| {
-                        ui.label("Decrypted:");
-                        ui.image(texture);
-                    });
-                }
-            });
+
+
+            if let Some(image_texture) = &self.image_texture {
+                ui.label("Image Preview:");
+                ui.image(ImageSource::Texture(SizedTexture {
+                    id: image_texture.id(),
+                    size: image_texture.size_vec2(),
+                }));
+            }
+
+
+
+
 
             ui.separator();
+            ui.label("📦 Encrypted Fields");
 
-            ui.heading("Image Preview");
-            ui.horizontal(|ui| {
-                if ui.button("Load Original Image").clicked() {
-                    self.original_texture = load_image_texture(ctx, "tests/nuts.png");
-                }
+            ui.group(|ui| {
+                ui.label("Encrypted (Base64):");
+                ui.text_edit_multiline(&mut self.image_ciphertext);
 
-                if ui.button("Load Decrypted Image").clicked() {
-                    self.decrypted_texture = load_image_texture(ctx, "decrypted_output.png");
-                }
+                ui.label("Nonce (Base64):");
+                ui.text_edit_multiline(&mut self.image_nonce);
+
+                ui.label("Decrypted Message:");
+                ui.text_edit_multiline(&mut self.decrypted_message);
             });
-
-            ui.horizontal(|ui| {
-                if let Some(texture) = &self.original_texture {
-                    ui.vertical(|ui| {
-                        ui.label("Original:");
-                        ui.image(texture);
-                    });
-                }
-
-                if let Some(texture) = &self.decrypted_texture {
-                    ui.vertical(|ui| {
-                        ui.label("Decrypted:");
-                        ui.image(texture);
-                    });
-                }
-            });
-
-            ui.label("Encrypted (Base64):");
-            ui.text_edit_multiline(&mut self.ciphertext);
-
-            ui.label("Nonce (Base64):");
-            ui.text_edit_multiline(&mut self.nonce);
-
-            ui.label("Decrypted Message:");
-            ui.text_edit_multiline(&mut self.decrypted);
         });
     }
 }
+
 
 /// Loads an image from the filesystem and coverts it into a texture that can be displayed in egu.
 /// 

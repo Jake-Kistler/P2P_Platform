@@ -4,6 +4,7 @@ mod tests {
     use std::fs;
     use std::path::Path;
     use tempdir::TempDir;
+    use base64::{engine::general_purpose, Engine as _};
 
     #[test]
     fn test_image_encryption_decryption_cycle() {
