@@ -164,6 +164,9 @@ struct MyApp {
     // mode
     pub mode: Mode,
     pub output: Option<(String, String)>,
+
+    // audio extension
+    pub audio_extension: Option<String>,
 }
 
 
@@ -301,6 +304,15 @@ impl eframe::App for MyApp {
                         .pick_file()
                     {
                         let path_str = path.display().to_string();
+
+                        // ✅ Extract file extension (mp3, wav, etc.)
+                        let extension = path.extension()
+                            .and_then(|ext| ext.to_str())
+                            .unwrap_or("mp3")  // fallback default
+                            .to_string();
+
+                        self.audio_extension = Some(extension.clone());
+
                         match file_crypto::encrypt_audio_file(&path_str, &self.file_password, self.mode) {
                             Ok((ciphertext, nonce)) => {
                                 self.output = Some((ciphertext.clone(), nonce.clone()));
@@ -317,8 +329,14 @@ impl eframe::App for MyApp {
                 }
 
                 if ui.button("Decrypt Audio").clicked() {
+                    let suggested_name = match &self.audio_extension {
+                        Some(ext) => format!("decrypted_audio.{}", ext),
+                        None => "decrypted_audio.mp3".to_string(), // fallback
+                    };
+
                     if let Some(path) = rfd::FileDialog::new()
                         .set_title("Save Decrypted Audio As")
+                        .set_file_name(suggested_name)
                         .save_file()
                     {
                         let out_path = path.display().to_string();
@@ -339,6 +357,7 @@ impl eframe::App for MyApp {
                     }
                 }
             });
+
 
             ui.separator();
             ui.label("📦 Encrypted Fields");
