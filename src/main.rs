@@ -165,8 +165,10 @@ struct MyApp {
     pub mode: Mode,
     pub output: Option<(String, String)>,
 
-    // audio extension
+    // audio , file and image extensions
     pub audio_extension: Option<String>,
+    pub file_extension: Option<String>,
+    pub image_extension: Option<String>,
 }
 
 
@@ -230,11 +232,54 @@ impl eframe::App for MyApp {
             ui.label("🖼️ Image Tools");
 
             ui.horizontal(|ui| {
-                if ui.button("Load Original Image").clicked() {
-                    self.image_texture = load_image_texture(ctx, "tests/nuts.png");
+                if ui.button("Encrypt Image").clicked() {
+                    if let Some(path) = rfd::FileDialog::new()
+                        .add_filter("Images", &["png", "jpg", "jpeg"])
+                        .pick_file()
+                    {
+                        let path_str = path.display().to_string();
+
+                        // Track file extension
+                        let extension = path.extension()
+                            .and_then(|ext| ext.to_str())
+                            .unwrap_or("png")
+                            .to_string();
+                        self.image_extension = Some(extension.clone());
+
+                        // Encrypt
+                        let (cipher_b64, nonce_b64) = image_crypto::encrypt_image(&path_str, &self.image_password);
+
+                        // Save and update UI
+                        self.image_ciphertext = cipher_b64;
+                        self.image_nonce = nonce_b64;
+                        fs::write("output/encrypted_image.txt", &self.image_ciphertext).ok();
+                        self.file_status = format!("Image encrypted and saved.");
+                    }
                 }
-                if ui.button("Load Decrypted Image").clicked() {
-                    self.image_texture = load_image_texture(ctx, "tests/decrypted_output.png");
+
+                if ui.button("Decrypt Image").clicked() {
+                    let suggested_name = match &self.image_extension {
+                        Some(ext) => format!("decrypted_output.{}", ext),
+                        None => "decrypted_output.png".to_string(),
+                    };
+
+                    if let Some(path) = rfd::FileDialog::new()
+                        .set_title("Save Decrypted Image As")
+                        .set_file_name(suggested_name)
+                        .save_file()
+                    {
+                        let out_path = path.display().to_string();
+
+                        image_crypto::decrypt_image(
+                            &self.image_ciphertext,
+                            &self.image_nonce,
+                            &self.image_password,
+                            &out_path,
+                        );
+
+                        self.image_texture = load_image_texture(ctx, &out_path);
+                        self.file_status = format!("Image decrypted and loaded.");
+                    }
                 }
             });
 
@@ -246,65 +291,81 @@ impl eframe::App for MyApp {
                 }));
             }
 
+
+
             ui.separator();
             ui.label("📁 File Tools");
 
             ui.horizontal(|ui| {
-                if ui.button("Select File to Encrypt").clicked() {
-                    if let Some(path) = rfd::FileDialog::new().pick_file() {
-                        self.file_path = path.display().to_string();
-                        self.file_status = format!("Selected: {}", self.file_path);
-                    }
-                }
-
                 if ui.button("Encrypt File").clicked() {
-                    if self.file_path.is_empty() {
-                        self.file_status = "No file selected.".to_string();
-                        return;
-                    }
-
-                    match file_crypto::encrypt_file(&self.file_path, &self.file_password, self.mode) {
-                        Ok((cipher_b64, nonce_b64)) => {
-                            let out_path = "output/encrypted_file.txt";
-                            fs::write(out_path, &cipher_b64).ok();
-                            self.image_ciphertext = cipher_b64;
-                            self.image_nonce = nonce_b64;
-                            self.file_status = format!("Encrypted file to: {}", out_path);
-                        }
-                        Err(e) => {
-                            self.file_status = format!("Encryption error: {}", e);
-                        }
-                    }
-                }
-
-                if ui.button("Select Encrypted File to Decrypt").clicked() {
                     if let Some(path) = rfd::FileDialog::new().pick_file() {
-                        self.file_path = path.display().to_string();
-                        self.file_status = format!("Selected: {}", self.file_path);
+                        let path_str = path.display().to_string();
+
+                        let extension = path.extension()
+                            .and_then(|ext| ext.to_str())
+                            .unwrap_or("bin")
+                            .to_string();
+                        self.file_extension = Some(extension.clone());
+                        self.file_path = path_str.clone();
+
+                        match file_crypto::encrypt_file(&path_str, &self.file_password, self.mode) {
+                            Ok((cipher_b64, nonce_b64)) => {
+                                self.output = Some((cipher_b64.clone(), nonce_b64.clone()));
+                                fs::write("output/encrypted_file.txt", &cipher_b64).ok();
+                                self.image_ciphertext = cipher_b64;
+                                self.image_nonce = nonce_b64;
+                                self.file_status = format!("Encrypted file saved to: output/encrypted_file.txt");
+                            }
+                            Err(e) => {
+                                self.file_status = format!("File encryption error: {}", e);
+                            }
+                        }
                     }
                 }
 
                 if ui.button("Decrypt File").clicked() {
-                    if self.file_path.is_empty() {
-                        self.file_status = "No file selected.".to_string();
-                        return;
-                    }
+                    let suggested_name = match &self.file_extension {
+                        Some(ext) => format!("decrypted_file.{}", ext),
+                        None => "decrypted_file.bin".to_string(),
+                    };
 
-                    let cipher = fs::read_to_string(&self.file_path).unwrap_or_default();
-                    let out_path = "output/decrypted_file";
+                    if let Some(save_path) = rfd::FileDialog::new()
+                        .set_title("Save Decrypted File As")
+                        .set_file_name(suggested_name)
+                        .save_file()
+                    {
+                        let out_path = save_path.display().to_string();
 
-                    match file_crypto::decrypt_file(
-                        &cipher,
-                        &self.image_nonce,
-                        &self.file_password,
-                        out_path,
-                        self.mode,
-                    ) {
-                        Ok(_) => self.file_status = format!("Decrypted to: {}", out_path),
-                        Err(e) => self.file_status = format!("Decryption error: {}", e),
+                        if let Some(enc_path) = rfd::FileDialog::new()
+                            .set_title("Select Encrypted File")
+                            .pick_file()
+                        {
+                            let cipher = fs::read_to_string(&enc_path).unwrap_or_default();
+
+                            match file_crypto::decrypt_file(
+                                &cipher,
+                                &self.image_nonce,
+                                &self.file_password,
+                                out_path.clone(),
+                                self.mode,
+                            ) {
+                                Ok(_) => self.file_status = format!("Decrypted file saved to: {}", out_path),
+                                Err(e) => self.file_status = format!("File decryption error: {}", e),
+                            }
+                        } else {
+                            self.file_status = "No encrypted file selected.".to_string();
+                        }
                     }
                 }
             });
+
+            ui.horizontal(|ui| {
+                ui.label("Password:");
+                ui.text_edit_singleline(&mut self.file_password);
+            });
+
+            ui.label(&self.file_status);
+
 
             ui.horizontal(|ui| {
                 ui.label("Password:");
