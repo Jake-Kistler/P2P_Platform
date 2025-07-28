@@ -250,34 +250,48 @@ impl eframe::App for MyApp {
             ui.label("📁 File Tools");
 
             ui.horizontal(|ui| {
-                ui.label("File Path:");
-                ui.text_edit_singleline(&mut self.file_path);
-            });
+                if ui.button("Select File to Encrypt").clicked() {
+                    if let Some(path) = rfd::FileDialog::new().pick_file() {
+                        self.file_path = path.display().to_string();
+                        self.file_status = format!("Selected: {}", self.file_path);
+                    }
+                }
 
-            ui.horizontal(|ui| {
-                ui.label("Password:");
-                ui.text_edit_singleline(&mut self.file_password);
-            });
-
-            ui.horizontal(|ui| {
                 if ui.button("Encrypt File").clicked() {
+                    if self.file_path.is_empty() {
+                        self.file_status = "No file selected.".to_string();
+                        return;
+                    }
+
                     match file_crypto::encrypt_file(&self.file_path, &self.file_password, self.mode) {
                         Ok((cipher_b64, nonce_b64)) => {
-                            let out_path = "output/encrypted_file.bin";
-                            fs::write(out_path, cipher_b64.clone()).ok();
-                            self.file_status = format!("Encrypted to: {out_path}");
+                            let out_path = "output/encrypted_file.txt";
+                            fs::write(out_path, &cipher_b64).ok();
                             self.image_ciphertext = cipher_b64;
                             self.image_nonce = nonce_b64;
+                            self.file_status = format!("Encrypted file to: {}", out_path);
                         }
                         Err(e) => {
-                            self.file_status = format!("Encryption error: {e}");
+                            self.file_status = format!("Encryption error: {}", e);
                         }
                     }
                 }
 
+                if ui.button("Select Encrypted File to Decrypt").clicked() {
+                    if let Some(path) = rfd::FileDialog::new().pick_file() {
+                        self.file_path = path.display().to_string();
+                        self.file_status = format!("Selected: {}", self.file_path);
+                    }
+                }
+
                 if ui.button("Decrypt File").clicked() {
-                    let out_path = "output/decrypted_file.txt";
+                    if self.file_path.is_empty() {
+                        self.file_status = "No file selected.".to_string();
+                        return;
+                    }
+
                     let cipher = fs::read_to_string(&self.file_path).unwrap_or_default();
+                    let out_path = "output/decrypted_file";
 
                     match file_crypto::decrypt_file(
                         &cipher,
@@ -286,13 +300,19 @@ impl eframe::App for MyApp {
                         out_path,
                         self.mode,
                     ) {
-                        Ok(_) => self.file_status = format!("Decrypted to: {out_path}"),
-                        Err(e) => self.file_status = format!("Decryption error: {e}"),
+                        Ok(_) => self.file_status = format!("Decrypted to: {}", out_path),
+                        Err(e) => self.file_status = format!("Decryption error: {}", e),
                     }
                 }
             });
 
+            ui.horizontal(|ui| {
+                ui.label("Password:");
+                ui.text_edit_singleline(&mut self.file_password);
+            });
+
             ui.label(&self.file_status);
+
 
             ui.separator();
             ui.label("🔊 Audio Tools");
