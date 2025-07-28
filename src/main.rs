@@ -30,8 +30,10 @@ use eframe::egui; // GUI things
 use egui::Widget;
 use egui::{ImageSource};
 use egui::load::SizedTexture;
+use rfd::FileDialog;
 
 use P2P_Platform::{encrypt_file, decrypt_file};
+use P2P_Platform::Mode;
 
 
 
@@ -41,11 +43,7 @@ pub use image_crypto::{encrypt_image, decrypt_image};
 const PBKDF2_ITERATIONS: u32 = 100_000;
 const NONCE_LENGTH: usize = 12;
 
-/// Enum to represent encryption types
-enum Mode {
-    AES,
-    DES,
-}
+
 
 /// Derive a key from a password using PBKDF2-HMAC-SHA256
 ///
@@ -162,6 +160,10 @@ struct MyApp {
     file_path: String,
     file_password: String,
     file_status: String,
+
+    // mode
+    pub mode: Mode,
+    pub output: Option<(String, String)>,
 }
 
 
@@ -182,33 +184,42 @@ struct MyApp {
 impl eframe::App for MyApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         egui::CentralPanel::default().show(ctx, |ui| {
-            ui.heading("🔐 Secure Message & Image Encryption");
+            ui.heading("🔐 Secure Message, File, Image, and Audio Encryption");
             ui.separator();
 
+            // Mode Selector
             ui.horizontal(|ui| {
-                ui.label("Enter Message:");
+                ui.label("Encryption Mode:");
+                ui.radio_value(&mut self.mode, Mode::AES, "AES (128-bit)");
+                ui.radio_value(&mut self.mode, Mode::DES, "DES (56-bit)");
+            });
+
+            ui.separator();
+            ui.label("📝 Text Message Tools");
+
+            ui.horizontal(|ui| {
+                ui.label("Message:");
                 ui.text_edit_singleline(&mut self.text_input);
             });
 
             ui.horizontal(|ui| {
-                ui.label("Enter Password:");
+                ui.label("Password:");
                 ui.text_edit_singleline(&mut self.text_password);
             });
 
             ui.horizontal(|ui| {
-                if ui.button("Encrypt").clicked() {
-                    let (cipher, nonce) = encrypt_aes(&self.text_input, &self.text_password);
+                if ui.button("Encrypt Text").clicked() {
+                    let (cipher, nonce) = encrypt_aes(&self.text_input, &self.text_password); // AES-only for now
                     self.image_ciphertext = cipher;
                     self.image_nonce = nonce;
-                    println!("Encrypted!");
                 }
-                if ui.button("Decrypt").clicked() {
+
+                if ui.button("Decrypt Text").clicked() {
                     self.decrypted_message = decrypt_aes(
                         &self.image_ciphertext,
                         &self.image_nonce,
                         &self.text_password,
                     );
-                    println!("Decrypted!");
                 }
             });
 
@@ -218,16 +229,11 @@ impl eframe::App for MyApp {
             ui.horizontal(|ui| {
                 if ui.button("Load Original Image").clicked() {
                     self.image_texture = load_image_texture(ctx, "tests/nuts.png");
-                    println!("Loaded original image!");
                 }
                 if ui.button("Load Decrypted Image").clicked() {
                     self.image_texture = load_image_texture(ctx, "tests/decrypted_output.png");
-                    println!("Loaded decrypted image!");
                 }
             });
-
-
-
 
             if let Some(image_texture) = &self.image_texture {
                 ui.label("Image Preview:");
@@ -252,11 +258,13 @@ impl eframe::App for MyApp {
 
             ui.horizontal(|ui| {
                 if ui.button("Encrypt File").clicked() {
-                    match encrypt_file(&self.file_path, &self.file_password) {
+                    match file_crypto::encrypt_file(&self.file_path, &self.file_password, self.mode) {
                         Ok((cipher_b64, nonce_b64)) => {
                             let out_path = "output/encrypted_file.bin";
                             fs::write(out_path, cipher_b64.clone()).ok();
                             self.file_status = format!("Encrypted to: {out_path}");
+                            self.image_ciphertext = cipher_b64;
+                            self.image_nonce = nonce_b64;
                         }
                         Err(e) => {
                             self.file_status = format!("Encryption error: {e}");
@@ -267,9 +275,14 @@ impl eframe::App for MyApp {
                 if ui.button("Decrypt File").clicked() {
                     let out_path = "output/decrypted_file.txt";
                     let cipher = fs::read_to_string(&self.file_path).unwrap_or_default();
-                    let nonce = "nonce-placeholder"; // TODO: Load from saved value or file
 
-                    match decrypt_file(&cipher, &nonce, &self.file_password, out_path) {
+                    match file_crypto::decrypt_file(
+                        &cipher,
+                        &self.image_nonce,
+                        &self.file_password,
+                        out_path,
+                        self.mode,
+                    ) {
                         Ok(_) => self.file_status = format!("Decrypted to: {out_path}"),
                         Err(e) => self.file_status = format!("Decryption error: {e}"),
                     }
@@ -278,9 +291,54 @@ impl eframe::App for MyApp {
 
             ui.label(&self.file_status);
 
+            ui.separator();
+            ui.label("🔊 Audio Tools");
 
+            ui.horizontal(|ui| {
+                if ui.button("Encrypt Audio").clicked() {
+                    if let Some(path) = rfd::FileDialog::new()
+                        .add_filter("Audio", &["wav", "mp3"])
+                        .pick_file()
+                    {
+                        let path_str = path.display().to_string();
+                        match file_crypto::encrypt_audio_file(&path_str, &self.file_password, self.mode) {
+                            Ok((ciphertext, nonce)) => {
+                                self.output = Some((ciphertext.clone(), nonce.clone()));
+                                fs::write("output/encrypted_audio.txt", &ciphertext).ok();
+                                self.image_nonce = nonce;
+                                self.image_ciphertext = ciphertext;
+                                self.file_status = format!("Encrypted audio from: {}", path_str);
+                            }
+                            Err(e) => {
+                                self.file_status = format!("Audio encryption error: {}", e);
+                            }
+                        }
+                    }
+                }
 
-
+                if ui.button("Decrypt Audio").clicked() {
+                    if let Some(path) = rfd::FileDialog::new()
+                        .set_title("Save Decrypted Audio As")
+                        .save_file()
+                    {
+                        let out_path = path.display().to_string();
+                        match file_crypto::decrypt_audio_file(
+                            &out_path,
+                            &self.image_ciphertext,
+                            &self.image_nonce,
+                            &self.file_password,
+                            self.mode,
+                        ) {
+                            Ok(_) => {
+                                self.file_status = format!("Decrypted audio to: {}", out_path);
+                            }
+                            Err(e) => {
+                                self.file_status = format!("Audio decryption error: {}", e);
+                            }
+                        }
+                    }
+                }
+            });
 
             ui.separator();
             ui.label("📦 Encrypted Fields");
@@ -298,6 +356,7 @@ impl eframe::App for MyApp {
         });
     }
 }
+
 
 
 /// Loads an image from the filesystem and coverts it into a texture that can be displayed in egu.
@@ -347,5 +406,6 @@ fn main() {
     println!("Decrypted: {}", des_decrypted);
 
     let options = eframe::NativeOptions::default();
-    eframe::run_native("Secure P2P Encryptor", options, Box::new(|_cc| Box::<MyApp>::default()));
+    eframe::run_native("Secure P2P Encryptor", options, Box::new(|_cc| Box::new(MyApp::default())));
+
 }
