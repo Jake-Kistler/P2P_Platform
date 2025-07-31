@@ -1,6 +1,6 @@
 //! Secure P2P Messaging Tool
 //!
-//! This application encrypts and decrypts messages, photos (yet to be implemented), files (yet to be implemented) using either:
+//! This application encrypts and decrypts messages, photos, files using either:
 //! - AES-128 in GCM mode (modern authenticated encryption)
 //! - DES in CBC mode (older 56 bit key support)
 //!
@@ -461,7 +461,7 @@ impl eframe::App for MyApp {
 
 
 /// Loads an image from the filesystem and coverts it into a texture that can be displayed in egu.
-/// 
+///
 /// # Arguments
 /// - `ctx` - Reference to the egui context used for texture management.
 /// - `path` - File path to the image
@@ -480,7 +480,7 @@ fn load_image_texture(ctx: &egui::Context, path: &str) -> Option<egui::TextureHa
     let pixels = image.as_flat_samples();
 
     Some(ctx.load_texture(
-        path.to_string(), 
+        path.to_string(),
         egui::ColorImage::from_rgba_unmultiplied(size, pixels.as_slice()),
         Default::default(),
     ))
